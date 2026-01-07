@@ -1,0 +1,706 @@
+/* ----------------------------------------
+   4. UI Components
+   ---------------------------------------- */
+
+/* ----------------------------------------
+   Input Group (Recorder + Upload)
+   ---------------------------------------- */
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+}
+
+/* ----------------------------------------
+   Waveform Container
+   ---------------------------------------- */
+
+.waveform-container {
+    background-color: var(--color-bg-surface);
+    border: var(--border-width) solid var(--border-color);
+    border-radius: var(--radius-xl);
+    padding: var(--space-lg);
+    position: relative;
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
+    margin-bottom: var(--space-xl);
+    overflow: hidden;
+}
+
+#waveform-canvas {
+    width: 100%;
+    height: 120px;
+    display: block;
+    filter: drop-shadow(0 0 4px var(--color-brand-glowing));
+}
+
+.time-display {
+    position: absolute;
+    bottom: var(--space-md);
+    right: var(--space-md);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    background: rgba(15, 23, 42, 0.8);
+    padding: 0.25rem 0.6rem;
+    border-radius: var(--radius-full);
+    color: var(--color-brand-secondary);
+    border: var(--border-width) solid #4ade80;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------------
+   Record Button
+   ---------------------------------------- */
+
+.control-buttons {
+    display: flex;
+    justify-content: center;
+    margin-bottom: var(--space-xl);
+}
+
+.record-btn {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    background-color: var(--color-record);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition-bounce);
+    box-shadow: var(--shadow-record);
+    border: 4px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    z-index: 10;
+}
+
+.record-btn:hover {
+    box-shadow: 0 6px 16px rgba(255, 82, 82, 0.5);
+    transform: scale(1.05);
+    background-color: #ff1744;
+}
+
+.record-btn:active {
+    transform: scale(0.95);
+}
+
+.record-btn svg {
+    fill: currentColor;
+    width: 36px;
+    height: 36px;
+}
+
+/* Recording State */
+.record-btn.recording {
+    background-color: #2b2930;
+    color: #e6e1e5;
+    border-radius: 32px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    border: 2px solid #5f6368;
+    animation: none;
+}
+
+.record-btn.recording:hover {
+    background-color: #49454F;
+    transform: scale(1.05);
+}
+
+.record-hint {
+    text-align: center;
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+    font-weight: 500;
+}
+
+/* ----------------------------------------
+   Upload Area
+   ---------------------------------------- */
+
+.upload-area {
+    background-color: var(--color-bg-surface);
+    border: var(--border-width-thick) dashed var(--border-color-light);
+    border-radius: var(--radius-lg);
+    padding: var(--space-xl) var(--space-lg);
+    text-align: center;
+    transition: var(--transition-normal);
+    cursor: pointer;
+}
+
+.upload-area:hover,
+.upload-area.dragover {
+    background-color: var(--color-bg-surface-hover);
+    border-color: var(--color-brand-primary);
+    transform: translateY(-2px);
+}
+
+.upload-area svg {
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-sm);
+    transition: color var(--transition-normal);
+}
+
+.upload-area:hover svg {
+    color: var(--color-brand-primary);
+}
+
+.upload-area p {
+    color: var(--color-text-primary);
+    font-size: var(--text-base);
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+.upload-formats {
+    display: block;
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+}
+
+/* ----------------------------------------
+   Results Section
+   ---------------------------------------- */
+
+.results-section {
+    background: transparent;
+    padding-top: 0;
+}
+
+.section-title {
+    font-size: var(--text-xl);
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-lg);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding-bottom: var(--space-sm);
+    border-bottom: var(--border-width-thick) solid rgba(255, 255, 255, 0.05);
+}
+
+.section-title svg {
+    color: var(--color-brand-secondary);
+}
+
+.results-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+/* ----------------------------------------
+   Result Item
+   ---------------------------------------- */
+
+.result-item {
+    background-color: var(--color-bg-surface);
+    border: var(--border-width) solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md);
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    transition: var(--transition-spring);
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.result-item::after {
+    content: '↗';
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    opacity: 0;
+    transition: opacity var(--transition-normal);
+    background-color: var(--color-bg-base);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.result-item:hover::after {
+    opacity: 1;
+}
+
+.result-item:hover {
+    background-color: var(--color-bg-surface-hover);
+    border-color: var(--color-brand-primary);
+    transform: translateX(4px) scale(1.01);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Result Rank Badge */
+.result-rank {
+    width: 2.25rem;
+    height: 2.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    background-color: var(--color-bg-base);
+    border-radius: var(--radius-md);
+    flex-shrink: 0;
+}
+
+.result-rank.top-1 {
+    background: var(--color-brand-primary);
+    color: white;
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+/* Result Info */
+.result-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.result-name {
+    font-weight: 600;
+    color: var(--color-text-primary);
+    font-size: 1.05rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 0.1rem;
+}
+
+.result-scientific {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+    opacity: 0.8;
+}
+
+.result-link-hint {
+    font-size: var(--text-xs);
+    color: var(--color-brand-primary);
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Result Confidence */
+.result-confidence {
+    text-align: right;
+    min-width: 70px;
+}
+
+.confidence-value {
+    display: block;
+    font-weight: 700;
+    font-size: var(--text-lg);
+    color: var(--color-success);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+}
+
+.confidence-bar {
+    width: 100%;
+    height: 6px;
+    background-color: var(--color-bg-base);
+    border-radius: var(--radius-full);
+    margin-top: 0.5rem;
+    overflow: hidden;
+}
+
+.confidence-bar-fill {
+    height: 100%;
+    background: var(--color-success);
+    border-radius: var(--radius-full);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+}
+
+/* ----------------------------------------
+   Retry Button
+   ---------------------------------------- */
+
+.retry-btn {
+    width: 100%;
+    margin-top: var(--space-xl);
+    padding: var(--space-md);
+    background-color: transparent;
+    border: var(--border-width) solid var(--border-color-light);
+    border-radius: var(--radius-lg);
+    color: var(--color-text-secondary);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: var(--transition-normal);
+}
+
+.retry-btn:hover {
+    background-color: var(--color-bg-surface-hover);
+    color: var(--color-text-primary);
+    border-color: var(--color-brand-primary);
+    transform: translateY(-2px);
+}
+
+/* ----------------------------------------
+   Loading Overlay
+   ---------------------------------------- */
+
+.loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--color-bg-base);
+    background-image:
+        radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.15), transparent 40%),
+        radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.15), transparent 40%);
+    z-index: var(--z-loading);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.4s ease, visibility 0.4s ease;
+    padding: var(--space-lg);
+    overflow-y: auto;
+}
+
+.loading-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.loading-content {
+    max-width: 400px;
+    width: 100%;
+    text-align: center;
+}
+
+/* Hero Section */
+.loading-hero {
+    margin-bottom: var(--space-xl);
+}
+
+.loading-logo {
+    font-size: 4rem;
+    display: block;
+    margin-bottom: var(--space-sm);
+    filter: drop-shadow(0 0 20px var(--color-brand-glowing));
+    animation: float 6s ease-in-out infinite;
+}
+
+.loading-title {
+    font-size: 2.5rem;
+    font-weight: 800;
+    background: var(--gradient-brand);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.25rem;
+    letter-spacing: -0.02em;
+}
+
+.loading-subtitle {
+    font-size: var(--text-lg);
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+
+/* Features Section */
+.loading-features {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-xl);
+    padding: var(--space-md);
+    background: rgba(30, 41, 59, 0.5);
+    border-radius: var(--radius-lg);
+    border: var(--border-width) solid var(--border-color);
+}
+
+.feature-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) 0;
+    text-align: left;
+}
+
+.feature-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.feature-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.feature-text strong {
+    color: var(--color-text-primary);
+    font-weight: 600;
+    font-size: var(--text-base);
+}
+
+.feature-text span {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+}
+
+/* Progress Section */
+.loading-progress-section {
+    margin-bottom: var(--space-lg);
+}
+
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(99, 102, 241, 0.1);
+    border-radius: 50%;
+    border-top-color: var(--color-brand-primary);
+    animation: spin 1s linear infinite;
+    margin: 0 auto var(--space-md);
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+}
+
+.loading-text {
+    font-size: var(--text-base);
+    font-weight: 600;
+    margin-bottom: var(--space-xs);
+    color: var(--color-text-primary);
+}
+
+.loading-bar-container {
+    height: 8px;
+    background-color: var(--color-bg-surface-hover);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    margin: var(--space-sm) 0;
+}
+
+.loading-bar-fill {
+    height: 100%;
+    background: var(--gradient-brand);
+    transition: width 0.1s linear;
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+    border-radius: var(--radius-full);
+}
+
+.loading-subtext {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Tip Section */
+.loading-tip-section {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.loading-tip {
+    font-size: var(--text-sm);
+    color: var(--color-brand-secondary);
+    font-weight: 500;
+    transition: opacity 0.3s ease;
+    margin: 0;
+}
+
+/* Model Info */
+.loading-model-info {
+    margin-top: var(--space-xl);
+    padding-top: var(--space-lg);
+    border-top: var(--border-width) solid rgba(255, 255, 255, 0.05);
+}
+
+.loading-model-info span {
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+    opacity: 0.7;
+}
+
+/* ----------------------------------------
+   Modal
+   ---------------------------------------- */
+
+.modal {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-md);
+}
+
+.modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.85);
+}
+
+.modal-content {
+    position: relative;
+    width: 100%;
+    max-width: 360px;
+    background-color: var(--color-bg-surface);
+    border: var(--border-width) solid var(--border-color);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-xl);
+    overflow: hidden;
+    animation: modalScale 0.2s var(--transition-bounce);
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 24px 24px 16px 24px;
+}
+
+.modal-header h2 {
+    font-size: var(--text-2xl);
+    font-weight: 400;
+    color: var(--color-text-primary);
+}
+
+.modal-close {
+    color: var(--color-text-muted);
+    padding: 8px;
+    border-radius: 50%;
+    transition: background-color var(--transition-normal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+}
+
+.modal-close:hover {
+    background-color: var(--color-bg-surface-hover);
+    color: var(--color-text-primary);
+}
+
+.modal-body {
+    padding: 0 24px 24px 24px;
+}
+
+/* ----------------------------------------
+   Settings Items
+   ---------------------------------------- */
+
+.setting-item {
+    margin-bottom: 20px;
+}
+
+.setting-item:last-child {
+    margin-bottom: 0;
+}
+
+.setting-item>label {
+    display: block;
+    color: var(--color-text-primary);
+    margin-bottom: 10px;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.8;
+}
+
+/* Select */
+.setting-item select {
+    width: 100%;
+    background-color: var(--color-bg-input);
+    border: var(--border-width) solid var(--border-color-light);
+    color: var(--color-text-primary);
+    padding: 12px 16px;
+    border-radius: 4px;
+    font-size: var(--text-base);
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23cac4d0'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 24px;
+    transition: border-color var(--transition-normal);
+    cursor: pointer;
+}
+
+.setting-item select:focus {
+    border-color: var(--color-brand-primary);
+    border-width: 2px;
+    padding: 11px 15px;
+}
+
+/* Range Container */
+.range-container {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.range-container input[type="range"] {
+    flex: 1;
+    height: 6px;
+    accent-color: var(--color-brand-primary);
+    cursor: pointer;
+}
+
+.range-container span {
+    min-width: 48px;
+    text-align: center;
+    color: var(--color-text-primary);
+    font-weight: 600;
+    font-size: var(--text-base);
+    font-variant-numeric: tabular-nums;
+    background: var(--color-bg-base);
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    border: var(--border-width) solid var(--border-color);
+}
+
+/* Checkbox Label */
+.setting-item label:has(input[type="checkbox"]) {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-transform: none;
+    letter-spacing: normal;
+    font-size: var(--text-base);
+    font-weight: 400;
+    opacity: 1;
+    cursor: pointer;
+    margin-bottom: 0;
+}
+
+/* Checkbox */
+.setting-item input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--color-brand-primary);
+    border-radius: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* ----------------------------------------
+   Loading States
+   ---------------------------------------- */
+
+.loading-state {
+    text-align: center;
+    padding: var(--space-xl);
+}
+
+.error-state {
+    text-align: center;
+    padding: var(--space-xl);
+    color: var(--color-error);
+}
+
+.no-results {
+    text-align: center;
+    padding: var(--space-xl);
+    color: var(--color-text-muted);
+}
