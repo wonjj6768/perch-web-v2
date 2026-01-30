@@ -102,12 +102,27 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    if (url.pathname.includes('/model/') || url.pathname.endsWith('.onnx')) {
+    if (isModelRequest(url)) {
+        event.respondWith(handleModelRequest(event.request));
         return;
     }
 
     event.respondWith(handleStaticRequest(event.request));
 });
+
+/**
+ * 모델 및 런타임 요청 판별
+ * @param {URL} url
+ */
+function isModelRequest(url) {
+    const path = url.pathname;
+    if (path.endsWith('.onnx')) return true;
+    if (path.endsWith('.wasm')) return true;
+    if (path.endsWith('ort.min.js')) return true;
+    if (path.includes('/model/')) return true;
+    if (url.hostname.includes('jsdelivr.net') && path.includes('onnxruntime-web')) return true;
+    return false;
+}
 
 /**
  * 정적 자산 요청 처리 (Stale-While-Revalidate)
@@ -126,6 +141,25 @@ async function handleStaticRequest(request) {
         .catch(() => cachedResponse);
 
     return cachedResponse || fetchPromise;
+}
+
+/**
+ * 모델 자산 요청 처리 (Cache-First)
+ */
+async function handleModelRequest(request) {
+    const cache = await caches.open(MODEL_CACHE_NAME);
+    const cachedResponse = await cache.match(request);
+    if (cachedResponse) return cachedResponse;
+
+    try {
+        const networkResponse = await fetch(request);
+        if (networkResponse.ok || networkResponse.type === 'opaque') {
+            cache.put(request, networkResponse.clone());
+        }
+        return networkResponse;
+    } catch (error) {
+        return cachedResponse || Promise.reject(error);
+    }
 }
 
 // ============================================
