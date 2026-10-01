@@ -70,6 +70,13 @@ test('real Perch ONNX in Chromium: whole-file analysis, playback, exports and re
     await page.screenshot({ path: testInfo.outputPath('mobile-results.png'), fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
+    // Cancel a longer real pipeline and verify controls recover before replacing it.
+    await page.locator('#file-input').setInputFiles({ name: 'cancel-60s.wav', mimeType: 'audio/wav', buffer: wav(60) });
+    await page.locator('#cancel-analysis').click();
+    await expect(page.locator('#analysis-status')).toContainText('분석 중지');
+    await expect(page.locator('#retry-btn')).toBeEnabled();
+    await expect(page.locator('#record-btn')).toBeEnabled();
+
     // A second real file must replace all prior windows and source metadata.
     await page.locator('#file-input').setInputFiles({ name: 'replacement-1s.wav', mimeType: 'audio/wav', buffer: wav(1) });
     await expect(page.locator('#analysis-status')).toContainText('분석 완료', { timeout: 3 * 60 * 1000 });
@@ -81,6 +88,6 @@ test('real Perch ONNX in Chromium: whole-file analysis, playback, exports and re
     await writeFile(testInfo.outputPath('verification.json'), JSON.stringify({
         mocked: false, input: 'synthetic audio, no biological accuracy claim',
         modelRequests: requests, uncaughtErrors: errors, viewport: '390x844',
-        verified: ['real model initialization', 'real browser inference', '12.25-second full-file coverage', 'tail timestamp', 'playback seek', 'JSON/CSV exports', 'replacement file', 'mobile overflow'],
+        verified: ['real model initialization', 'real browser inference', '12.25-second full-file coverage', 'tail timestamp', 'playback seek', 'JSON/CSV exports', 'pipeline cancellation and control recovery', 'replacement file', 'mobile overflow'],
     }, null, 2));
 });
