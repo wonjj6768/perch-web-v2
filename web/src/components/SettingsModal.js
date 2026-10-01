@@ -70,6 +70,12 @@ class SettingsModal {
         });
 
         document.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab' && this.#isOpen) {
+                const controls = [...domElements.settingsModal.querySelectorAll('button, select, input, [tabindex="0"]')].filter(element => !element.disabled);
+                const first = controls[0], last = controls[controls.length - 1];
+                if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+                else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+            }
             if (e.key === 'Escape' && this.#isOpen) {
                 this.close();
             }

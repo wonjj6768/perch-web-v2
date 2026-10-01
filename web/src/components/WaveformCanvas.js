@@ -20,6 +20,7 @@ class WaveformCanvas {
     #ctx = null;
     #animationFrameId = null;
     #isAnimating = false;
+    #onResize = () => this.#handleResize();
 
     // ============================================
     // Init
@@ -36,7 +37,7 @@ class WaveformCanvas {
         this.resize();
         this.drawIdle();
 
-        window.addEventListener('resize', () => this.#handleResize());
+        window.addEventListener('resize', this.#onResize);
 
         console.log('WaveformCanvas 초기화 완료');
     }
@@ -185,7 +186,7 @@ class WaveformCanvas {
 
     dispose() {
         this.stopVisualization();
-        window.removeEventListener('resize', () => this.#handleResize());
+        window.removeEventListener('resize', this.#onResize);
         this.#canvas = null;
         this.#ctx = null;
     }

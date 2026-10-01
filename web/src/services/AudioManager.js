@@ -4,10 +4,9 @@
  * @module AudioManager
  */
 
-import CONFIG from '../config/index.js';
 import { SAMPLE_RATE, RECORDING_DURATION_MS, FFT_SIZE, SMOOTHING_TIME_CONSTANT } from '../config/constants.js';
 import stateManager from './StateManager.js';
-import { getSupportedMimeType, processAudioBuffer } from '../utils/audio-utils.js';
+import { getSupportedMimeType, prepareFullAudio } from '../utils/audio-utils.js';
 import { AudioError } from '../utils/errors.js';
 
 // ============================================
@@ -51,6 +50,10 @@ class AudioManager {
 
     /** @type {RecordingCallbacks} */
     #callbacks = {};
+    #starting = false;
+    #stopPending = false;
+    #generation = 0;
+    #source = null;
 
     // ============================================
     // Initialization
@@ -90,6 +93,9 @@ class AudioManager {
      * @param {RecordingCallbacks} [callbacks]
      */
     async startRecording(callbacks = {}) {
+        if (this.#starting || this.#isRecording || this.#stopPending) return;
+        this.#starting = true;
+        const generation = ++this.#generation;
         this.#callbacks = callbacks;
 
         try {
@@ -106,28 +112,38 @@ class AudioManager {
                 }
             });
 
-            const source = this.#audioContext.createMediaStreamSource(this.#mediaStream);
-            source.connect(this.#analyser);
+            if (generation !== this.#generation) {
+                this.#mediaStream.getTracks().forEach(track => track.stop());
+                this.#mediaStream = null;
+                return;
+            }
+            this.#source = this.#audioContext.createMediaStreamSource(this.#mediaStream);
+            this.#source.connect(this.#analyser);
 
-            this.#mediaRecorder = new MediaRecorder(this.#mediaStream, {
-                mimeType: getSupportedMimeType(),
-            });
+            const mimeType = getSupportedMimeType();
+            this.#mediaRecorder = new MediaRecorder(this.#mediaStream, mimeType ? { mimeType } : {});
 
             this.#audioChunks = [];
 
             this.#mediaRecorder.ondataavailable = (event) => {
+                if (generation !== this.#generation) return;
                 if (event.data.size > 0) {
                     this.#audioChunks.push(event.data);
                 }
             };
 
             this.#mediaRecorder.onstop = () => {
+                if (generation !== this.#generation) return;
                 this.#handleRecordingStop();
             };
 
             this.#mediaRecorder.onerror = (event) => {
+                if (generation !== this.#generation) return;
                 console.error('[AudioManager] Record error:', event.error);
-                this.#callbacks.onError?.(AudioError.recordingStartFailed(event.error));
+                const onError = this.#callbacks.onError;
+                this.#callbacks = {}; // Never classify a failed or partial recorder error.
+                this.stopRecording();
+                onError?.(AudioError.recordingStartFailed(event.error));
             };
 
             this.#mediaRecorder.start();
@@ -145,10 +161,14 @@ class AudioManager {
             }, RECORDING_DURATION_MS);
 
         } catch (error) {
+            this.#mediaStream?.getTracks().forEach(track => track.stop());
+            this.#mediaStream = null;
             if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
                 throw AudioError.permissionDenied();
             }
             throw AudioError.recordingStartFailed(error);
+        } finally {
+            this.#starting = false;
         }
     }
 
@@ -162,7 +182,9 @@ class AudioManager {
                 this.#autoStopTimeout = null;
             }
 
-            this.#mediaRecorder.stop();
+            this.#stopPending = true;
+            if (this.#mediaRecorder.state !== 'inactive') this.#mediaRecorder.stop();
+            else this.#handleRecordingStop();
             this.#isRecording = false;
 
             stateManager.set('isRecording', false);
@@ -170,17 +192,22 @@ class AudioManager {
     }
 
     #handleRecordingStop() {
+        this.#stopPending = false;
+        this.#isRecording = false;
+        stateManager.set('isRecording', false);
+        clearTimeout(this.#autoStopTimeout);
+        this.#autoStopTimeout = null;
         if (this.#mediaStream) {
             this.#mediaStream.getTracks().forEach(track => track.stop());
             this.#mediaStream = null;
         }
 
-        const audioBlob = new Blob(this.#audioChunks, { type: 'audio/webm' });
+        this.#source?.disconnect();
+        this.#source = null;
+        const audioBlob = new Blob(this.#audioChunks, { type: this.#mediaRecorder?.mimeType || this.#audioChunks[0]?.type || '' });
         this.#audioChunks = [];
 
-        if (stateManager.getSettings().autoClassify) {
-            this.#callbacks.onStop?.(audioBlob);
-        }
+        this.#callbacks.onStop?.(audioBlob);
     }
 
     // ============================================
@@ -194,7 +221,7 @@ class AudioManager {
         try {
             const arrayBuffer = await blob.arrayBuffer();
             const audioBuffer = await this.#audioContext.decodeAudioData(arrayBuffer);
-            return processAudioBuffer(audioBuffer);
+            return prepareFullAudio(audioBuffer);
         } catch (error) {
             throw AudioError.processingFailed(error);
         }
@@ -207,7 +234,7 @@ class AudioManager {
         try {
             const arrayBuffer = await file.arrayBuffer();
             const audioBuffer = await this.#audioContext.decodeAudioData(arrayBuffer);
-            return processAudioBuffer(audioBuffer);
+            return prepareFullAudio(audioBuffer);
         } catch (error) {
             throw AudioError.processingFailed(error);
         }
@@ -223,7 +250,13 @@ class AudioManager {
     get audioContext() { return this.#audioContext; }
 
     dispose() {
+        ++this.#generation;
+        this.#callbacks = {};
         this.stopRecording();
+        this.#mediaStream?.getTracks().forEach(track => track.stop());
+        this.#mediaStream = null;
+        this.#source?.disconnect();
+        this.#source = null;
 
         if (this.#audioContext) {
             this.#audioContext.close();

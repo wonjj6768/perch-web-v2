@@ -4,7 +4,8 @@
  * @module app
  */
 
-import { UI_TEXT } from './config/constants.js';
+import { UI_TEXT, AUDIO_SAMPLES, SAMPLE_RATE } from './config/constants.js';
+import { analyzeSegments, exportCSV } from './utils/analysis-utils.js';
 import { stateManager, audioManager, modelService } from './services/index.js';
 import {
     domElements,
@@ -23,6 +24,14 @@ import {
 class App {
     /** @type {boolean} */
     #initialized = false;
+    #controller = null;
+    #generation = 0;
+    #source = null;
+    #sourceURL = null;
+    #report = null;
+    #playbackEnd = null;
+    #recordStarting = false;
+    #disposed = false;
 
     // ============================================
     // Init
@@ -72,6 +81,9 @@ class App {
             console.error('초기화 실패:', error);
             loadingUI.updateProgress(`오류: ${error.message}`);
             loadingUI.stopTipRotation();
+            loadingUI.stopLoadingTimer();
+            const retry = document.getElementById('model-retry');
+            if (retry) { retry.hidden = false; retry.onclick = () => location.reload(); }
         }
     }
 
@@ -89,9 +101,24 @@ class App {
 
         uploadArea.initialize((file) => this.#handleFileUpload(file));
 
-        domElements.retryBtn?.addEventListener('click', () => {
-            resultRenderer.hideResults();
+        domElements.retryBtn?.addEventListener('click', () => this.#analyzeSource());
+        document.getElementById('cancel-analysis').addEventListener('click', () => {
+            this.#controller?.abort();
+            this.#setStatus('중지 요청됨 · 실행 중인 구간이 끝나면 중지합니다');
         });
+        document.getElementById('export-json').addEventListener('click', () => this.#export('json'));
+        document.getElementById('export-csv').addEventListener('click', () => this.#export('csv'));
+        const player = document.getElementById('audio-player');
+        player.addEventListener('timeupdate', () => {
+            if (this.#playbackEnd !== null && player.currentTime >= this.#playbackEnd) {
+                player.pause(); this.#playbackEnd = null;
+            }
+        });
+        player.addEventListener('seeking', () => {
+            if (this.#playbackEnd !== null && player.currentTime > this.#playbackEnd) this.#playbackEnd = null;
+        });
+        window.addEventListener('pagehide', () => this.dispose(), { once: true });
+        window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
     }
 
     // ============================================
@@ -99,70 +126,156 @@ class App {
     // ============================================
 
     async #handleRecordStart() {
+        if (this.#recordStarting || this.#controller || this.#disposed) return;
+        this.#recordStarting = true;
+        recordButton.setDisabled(true);
+        uploadArea.setDisabled(true);
+        this.#setActions(true);
         try {
             await audioManager.startRecording({
-                onStop: (blob) => this.#classifyAudioBlob(blob),
-                onError: (error) => {
-                    console.error('녹음 오류:', error);
+                onStop: blob => {
+                    if (this.#disposed) return;
+                    recordButton.setDisabled(false);
+                    waveformCanvas.stopVisualization();
+                    uploadArea.setDisabled(false);
+                    this.#setSource(blob, '마이크 녹음');
+                    if (stateManager.getSettings().autoClassify) this.#analyzeSource();
+                    else {
+                        resultRenderer.showLoading('녹음이 준비됐습니다. 듣고 분석 시작을 눌러 주세요');
+                        this.#setStatus('녹음 준비 완료');
+                        this.#setActions(false);
+                    }
+                },
+                onError: error => {
+                    waveformCanvas.stopVisualization();
+                    recordButton.setDisabled(false);
+                    uploadArea.setDisabled(false);
+                    this.#setActions(false);
                     resultRenderer.showError(error.message);
                 },
             });
-
-            waveformCanvas.startVisualization();
-
+            if (!this.#disposed && audioManager.isRecording) waveformCanvas.startVisualization();
         } catch (error) {
-            console.error('녹음 시작 실패:', error);
-            alert(error.message);
+            resultRenderer.showError(error.message);
+            uploadArea.setDisabled(false);
+            this.#setActions(false);
+        } finally {
+            this.#recordStarting = false;
+            recordButton.setDisabled(false);
         }
     }
 
     #handleRecordStop() {
+        recordButton.setDisabled(true);
         audioManager.stopRecording();
         waveformCanvas.stopVisualization();
     }
 
     async #handleFileUpload(file) {
-        await this.#classifyAudioFile(file);
+        this.#setSource(file, file.name);
+        await this.#analyzeSource();
     }
 
-    // ============================================
-    // Classification
-    // ============================================
+    #setSource(blob, name) {
+        this.#controller?.abort();
+        ++this.#generation;
+        this.#source = { blob, name };
+        this.#report = null;
+        const player = document.getElementById('audio-player');
+        player.pause(); this.#playbackEnd = null;
+        if (this.#sourceURL) URL.revokeObjectURL(this.#sourceURL);
+        this.#sourceURL = URL.createObjectURL(blob);
+        player.src = this.#sourceURL;
+        document.getElementById('source-name').textContent = name;
+        document.getElementById('analysis-progress').value = 0;
+        document.getElementById('analysis-panel').classList.remove('hidden');
+        this.#setActions(false);
+    }
 
-    /**
-     * 오디오 Blob 분류
-     */
-    async #classifyAudioBlob(blob) {
+    #setStatus(text) { document.getElementById('analysis-status').textContent = text; }
+
+    #setActions(busy) {
+        document.getElementById('cancel-analysis').hidden = !busy || !this.#controller;
+        domElements.retryBtn.disabled = busy || !this.#source;
+        domElements.retryBtn.textContent = this.#report ? '현재 설정으로 다시 분석' : '분석 시작';
+        for (const id of ['export-json', 'export-csv']) document.getElementById(id).disabled = busy || !this.#report;
+    }
+
+    async #analyzeSource() {
+        if (!this.#source || this.#disposed) return;
+        this.#controller?.abort();
+        const controller = new AbortController();
+        this.#controller = controller;
+        const generation = ++this.#generation;
+        const source = this.#source;
+        const settings = stateManager.getSettings();
+        this.#report = null;
+        this.#setActions(true);
+        recordButton.setDisabled(true);
+        resultRenderer.showLoading('전체 오디오를 준비하고 있습니다…');
+        this.#setStatus('오디오 디코딩 중 · 최대 20분 / 50MB');
+        document.getElementById('analysis-progress').value = 0;
+        let report;
         try {
-            resultRenderer.showLoading(UI_TEXT.CLASSIFYING);
-
-            const audioData = await audioManager.processBlob(blob);
-            const results = await modelService.classify(audioData);
-
-            resultRenderer.displayResults(results);
-
+            const samples = await audioManager.processFile(source.blob);
+            controller.signal.throwIfAborted();
+            report = {
+                schemaVersion: 1, name: source.name, model: 'Google Perch v2 (ONNX)',
+                scoreType: 'softmax (uncalibrated)', sampleRate: SAMPLE_RATE,
+                duration: samples.length / SAMPLE_RATE, windowSeconds: AUDIO_SAMPLES / SAMPLE_RATE,
+                settings, createdAt: new Date().toISOString(), status: 'running',
+                totalSegments: Math.ceil(samples.length / AUDIO_SAMPLES), segments: [],
+            };
+            await analyzeSegments(samples, audio => modelService.classify(audio, settings), {
+                signal: controller.signal,
+                onProgress: ({ completed, total, segments }) => {
+                    if (generation !== this.#generation) return;
+                    report.segments = segments.slice();
+                    document.getElementById('analysis-progress').value = completed / total;
+                    this.#setStatus(`전체 구간 분석 중 · ${completed} / ${total} (${Math.round(completed / total * 100)}%)`);
+                },
+            });
+            controller.signal.throwIfAborted();
+            if (generation !== this.#generation || this.#disposed) return;
+            report.status = 'completed';
+            this.#setStatus(`분석 완료 · ${report.totalSegments}개 구간`);
         } catch (error) {
-            console.error('분류 실패:', error);
-            resultRenderer.showError(UI_TEXT.ERROR_CLASSIFICATION);
+            if (generation !== this.#generation || this.#disposed) return;
+            if (controller.signal.aborted) {
+                if (report) report.status = 'cancelled';
+                this.#setStatus(`분석 중지 · ${report?.segments.length || 0}개 완료 구간만 표시`);
+            } else {
+                if (report) report.status = 'failed';
+                this.#setStatus(`분석 실패: ${error.message}`);
+            }
+            if (!report?.segments.length) resultRenderer.showError(controller.signal.aborted ? '분석을 중지했습니다. 다시 시작할 수 있습니다' : error.message);
+        } finally {
+            if (generation === this.#generation && !this.#disposed) {
+                this.#controller = null;
+                this.#report = report?.segments.length ? report : null;
+                if (this.#report) resultRenderer.displayReport(this.#report, segment => this.#playSegment(segment));
+                recordButton.setDisabled(false);
+                this.#setActions(false);
+            }
         }
     }
 
-    /**
-     * 오디오 파일 분류
-     */
-    async #classifyAudioFile(file) {
-        try {
-            resultRenderer.showLoading(UI_TEXT.PROCESSING_FILE);
+    async #playSegment(segment) {
+        const player = document.getElementById('audio-player');
+        player.currentTime = segment.start;
+        this.#playbackEnd = segment.end;
+        try { await player.play(); }
+        catch { this.#setStatus('재생할 수 없습니다. 오디오 플레이어의 재생 버튼을 눌러 주세요'); }
+    }
 
-            const audioData = await audioManager.processFile(file);
-            const results = await modelService.classify(audioData);
-
-            resultRenderer.displayResults(results);
-
-        } catch (error) {
-            console.error('파일 분류 실패:', error);
-            resultRenderer.showError(UI_TEXT.ERROR_FILE_PROCESSING);
-        }
+    #export(format) {
+        if (!this.#report) return;
+        const content = format === 'json' ? JSON.stringify(this.#report, null, 2) : exportCSV(this.#report);
+        const url = URL.createObjectURL(new Blob([content], { type: format === 'json' ? 'application/json' : 'text/csv;charset=utf-8' }));
+        const anchor = document.createElement('a'); anchor.href = url;
+        anchor.download = `${this.#report.name.replace(/[^a-zA-Z0-9가-힣._-]/g, '_')}-perch.${format}`;
+        document.body.append(anchor); anchor.click(); anchor.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     // ============================================
@@ -188,6 +301,11 @@ class App {
     // ============================================
 
     dispose() {
+        this.#disposed = true;
+        ++this.#generation;
+        this.#controller?.abort();
+        document.getElementById('audio-player')?.pause();
+        if (this.#sourceURL) URL.revokeObjectURL(this.#sourceURL);
         audioManager.dispose();
         waveformCanvas.dispose();
         loadingUI.dispose();

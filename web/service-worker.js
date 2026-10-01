@@ -8,7 +8,7 @@
 // 설정
 // ============================================
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const APP_CACHE_NAME = `Perch Web-app-${CACHE_VERSION}`;
 const MODEL_CACHE_NAME = 'perch-v2-model-cache';
 
@@ -17,10 +17,6 @@ const STATIC_ASSETS = [
     './',
     './index.html',
     './styles.css',
-    './css/variables.css',
-    './css/base.css',
-    './css/animations.css',
-    './css/layout.css',
     './css/components.css',
     './src/app.js',
     './src/config/constants.js',
@@ -38,6 +34,7 @@ const STATIC_ASSETS = [
     './src/components/UploadArea.js',
     './src/components/index.js',
     './src/utils/audio-utils.js',
+    './src/utils/analysis-utils.js',
     './src/utils/errors.js',
     './src/utils/index.js',
     './manifest.json',
@@ -64,7 +61,11 @@ self.addEventListener('install', (event) => {
         caches.open(APP_CACHE_NAME)
             .then((cache) => cache.addAll(STATIC_ASSETS))
             .then(() => self.skipWaiting())
-            .catch((err) => console.error('[SW] Install failed:', err))
+            .catch((err) => {
+                console.error('[SW] Install failed:', err);
+                // Keep the previous working worker when any required asset is missing.
+                throw err;
+            })
     );
 });
 

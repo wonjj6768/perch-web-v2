@@ -13,6 +13,7 @@ import { validateAudioFile } from '../utils/audio-utils.js';
 
 class UploadArea {
     #onFileSelect = null;
+    #disabled = false;
 
     // ============================================
     // Init
@@ -32,7 +33,10 @@ class UploadArea {
         const uploadArea = domElements.uploadArea;
         const fileInput = domElements.fileInput;
 
-        uploadArea?.addEventListener('click', () => fileInput?.click());
+        uploadArea?.addEventListener('click', () => { if (!this.#disabled) fileInput?.click(); });
+        uploadArea?.addEventListener('keydown', event => {
+            if (!this.#disabled && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); fileInput?.click(); }
+        });
 
         fileInput?.addEventListener('change', (e) => {
             const target = /** @type {HTMLInputElement} */(e.target);
@@ -66,6 +70,7 @@ class UploadArea {
     }
 
     #handleFileSelect(file) {
+        if (this.#disabled) return;
         const validation = validateAudioFile(file);
 
         if (!validation.valid) {
@@ -83,6 +88,9 @@ class UploadArea {
     // ============================================
 
     setDisabled(disabled) {
+        this.#disabled = disabled;
+        domElements.uploadArea?.setAttribute('aria-disabled', String(disabled));
+        if (domElements.fileInput) domElements.fileInput.disabled = disabled;
         const uploadArea = domElements.uploadArea;
         if (uploadArea) {
             uploadArea.style.opacity = disabled ? '0.5' : '1';
