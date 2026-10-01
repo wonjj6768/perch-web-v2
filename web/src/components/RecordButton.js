@@ -43,7 +43,7 @@ class RecordButton {
         });
 
         document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space' && !this.#isInputFocused(e)) {
+            if (e.code === 'Space' && !e.repeat && !this.#isInputFocused(e) && !document.querySelector('[role=dialog]:not(.hidden)')) {
                 e.preventDefault();
                 this.toggle();
             }
@@ -52,7 +52,7 @@ class RecordButton {
 
     #isInputFocused(e) {
         const target = /** @type {HTMLElement} */(e.target);
-        return target.matches('input, select, textarea');
+        return target.closest('input, select, textarea, button, a, [role=button], [contenteditable=true]');
     }
 
     // ============================================
@@ -60,7 +60,7 @@ class RecordButton {
     // ============================================
 
     startRecording() {
-        if (!stateManager.get('isRecording')) {
+        if (!domElements.recordBtn?.disabled && !stateManager.get('isRecording')) {
             this.#onRecordStart?.();
         }
     }

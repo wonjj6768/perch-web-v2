@@ -83,7 +83,7 @@ export function getSupportedMimeType() {
             return mimeType;
         }
     }
-    return 'audio/webm';
+    return ''; // Let the browser choose when no advertised MIME type matches.
 }
 
 /**
@@ -147,7 +147,7 @@ export function validateAudioFile(file) {
         return { valid: false, error: '파일 없음' };
     }
 
-    if (!file.type.startsWith('audio/')) {
+    if (!file.type.startsWith('audio/') && !getMimeTypeFromExtension(file.name)) {
         return { valid: false, error: '오디오 파일 아님' };
     }
 
@@ -168,7 +168,8 @@ export function validateAudioFile(file) {
  * @param {Float32Array} data
  */
 export function normalizeAudio(data) {
-    const maxAbs = Math.max(...data.map(Math.abs));
+    let maxAbs = 0;
+    for (const sample of data) maxAbs = Math.max(maxAbs, Math.abs(sample));
 
     if (maxAbs === 0) {
         return data;
@@ -182,3 +183,23 @@ export function normalizeAudio(data) {
     return result;
 }
 
+
+/** Mix every channel and resample the entire recording with the browser's audio resampler. */
+export async function prepareFullAudio(audioBuffer) {
+    if (!audioBuffer.length || !Number.isFinite(audioBuffer.duration)) throw new Error('비어 있는 오디오입니다');
+    if (audioBuffer.duration > 20 * 60) throw new Error('한 번에 최대 20분까지 분석할 수 있습니다. 파일을 나누어 주세요');
+    const length = Math.ceil(audioBuffer.duration * SAMPLE_RATE);
+    const OfflineContext = globalThis.OfflineAudioContext || globalThis.webkitOfflineAudioContext;
+    const context = new OfflineContext(1, length, SAMPLE_RATE);
+    const mono = context.createBuffer(1, audioBuffer.length, audioBuffer.sampleRate);
+    const target = mono.getChannelData(0);
+    for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+        const input = audioBuffer.getChannelData(channel);
+        for (let i = 0; i < input.length; i++) target[i] += input[i] / audioBuffer.numberOfChannels;
+    }
+    const source = context.createBufferSource();
+    source.buffer = mono;
+    source.connect(context.destination);
+    source.start();
+    return (await context.startRendering()).getChannelData(0);
+}

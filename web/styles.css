@@ -661,3 +661,24 @@ select {
       font-size: 1.75rem;
    }
 }
+/* Whole-recording analysis */
+[hidden] { display: none !important; }
+#analysis-panel { overflow-wrap: anywhere; }
+#analysis-panel audio, #analysis-progress { width: 100%; display: block; margin: 12px 0; }
+#analysis-status { font-size: .9rem; color: var(--color-text-secondary); }
+.analysis-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 16px 0; }
+.analysis-actions .secondary-btn { width: auto; margin: 0; }
+button:disabled { cursor: not-allowed; opacity: .5; }
+button:focus-visible, a:focus-visible, input:focus-visible, [role=button]:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 4px; }
+.score-note, .analysis-meta { font-size: .82rem; color: #59636d; margin: 10px 0; }
+.species-summary { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.species-chip { padding: 7px 10px; border-radius: 20px; background: #e7f5ff; color: #1864ab; font-size: .8rem; }
+.filter-label { display: block; margin: 12px 0 5px; font-size: .85rem; }
+#species-search { width: 100%; padding: 10px; border: 1px solid var(--color-border); border-radius: 8px; font: inherit; }
+.timeline-segment { border: 1px solid var(--color-border-light); border-radius: 10px; padding: 14px; margin-top: 12px; }
+.segment-play { font-variant-numeric: tabular-nums; color: #1864ab; padding: 4px 0; font-size: .9rem; }
+.detection-row { display: flex; align-items: baseline; gap: 12px; justify-content: space-between; margin-top: 8px; font-size: .9rem; }
+.detection-row a { color: var(--color-text); overflow-wrap: anywhere; }
+.detection-score { flex-shrink: 0; font-variant-numeric: tabular-nums; color: #1864ab; }
+@media (max-width: 420px) { .analysis-actions .secondary-btn { padding: 8px 12px; font-size: .85rem; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
