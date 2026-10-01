@@ -30,7 +30,7 @@ class ResultRenderer {
         resultsList.replaceChildren();
         resultsSection.classList.remove('hidden');
         const summary = summarizeDetections(report.segments);
-        const subtitle = node('p', `${summary.length}종 후보 · ${report.segments.length}/${report.totalSegments}개 구간 · ${formatTimestamp(report.duration)}`, 'analysis-meta');
+        const subtitle = node('p', `${summary.length}개 후보 · ${report.segments.length}/${report.totalSegments}개 구간 · ${formatTimestamp(report.duration)}`, 'analysis-meta');
         resultsList.append(subtitle);
         resultsList.append(node('p', '점수는 모델의 상대적 분류 점수이며, 실제 종이 맞을 확률을 보장하지 않습니다. 낮은 점수와 겹치는 울음은 직접 확인하세요.', 'score-note'));
         if (!summary.length) resultsList.append(node('p', '설정한 최소 점수를 넘는 후보가 없습니다. 설정을 낮추고 다시 분석해 보세요.'));
@@ -73,10 +73,13 @@ class ResultRenderer {
                 if (!segment.detections.length) section.append(node('p', '최소 점수 이상의 후보 없음', 'analysis-meta'));
                 for (const detection of segment.detections) {
                     const row = node('div', undefined, 'detection-row');
-                    const name = node('a', detection.koreanName || detection.label);
-                    name.href = `https://en.wikipedia.org/wiki/${encodeURIComponent(detection.label)}`;
-                    name.target = '_blank'; name.rel = 'noopener noreferrer';
-                    name.title = `${detection.label} · 위키백과 (새 탭)`;
+                    const scientific = !detection.label.includes('_') && /^[A-Z][a-z]+ [a-z]/.test(detection.label);
+                    const name = node(scientific ? 'a' : 'span', detection.koreanName || detection.label);
+                    if (scientific) {
+                        name.href = `https://en.wikipedia.org/wiki/${encodeURIComponent(detection.label)}`;
+                        name.target = '_blank'; name.rel = 'noopener noreferrer';
+                        name.title = `${detection.label} · 위키백과 (새 탭)`;
+                    }
                     const score = node('span', `${(detection.confidence * 100).toFixed(1)}%`, 'detection-score');
                     row.append(name, score); section.append(row);
                 }
