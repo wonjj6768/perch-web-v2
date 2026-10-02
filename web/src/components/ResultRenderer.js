@@ -15,11 +15,13 @@ class ResultRenderer {
     #report = null;
     #play = null;
 
-    displayReport(report, onPlay) {
+    displayReport(report, onPlay, { preserveView = false } = {}) {
         this.#report = report;
         this.#play = onPlay;
-        this.#page = 0;
-        this.#query = '';
+        if (!preserveView) {
+            this.#page = 0;
+            this.#query = '';
+        }
         this.#render();
     }
 
@@ -32,8 +34,11 @@ class ResultRenderer {
         const summary = summarizeDetections(report.segments);
         const subtitle = node('p', `${summary.length}개 후보 · ${report.segments.length}/${report.totalSegments}개 구간 · ${formatTimestamp(report.duration)}`, 'analysis-meta');
         resultsList.append(subtitle);
+        const settings = node('p', `구간당 최대 ${report.settings.topK}개 후보 · 최소 모델 점수 ${Math.round(report.settings.threshold * 100)}%`, 'analysis-meta');
+        settings.id = 'result-settings';
+        resultsList.append(settings);
         resultsList.append(node('p', '점수는 모델의 상대적 분류 점수이며, 실제 종이 맞을 확률을 보장하지 않습니다. 낮은 점수와 겹치는 울음은 직접 확인하세요.', 'score-note'));
-        if (!summary.length) resultsList.append(node('p', '설정한 최소 점수를 넘는 후보가 없습니다. 설정을 낮추고 다시 분석해 보세요.'));
+        if (!summary.length) resultsList.append(node('p', '설정한 최소 점수를 넘는 후보가 없습니다. 설정에서 최소 점수를 낮추면 결과에 바로 반영됩니다.'));
         const overview = node('div', undefined, 'species-summary');
         for (const species of summary.slice(0, 20)) {
             const button = node('button', `${species.koreanName || species.label} · ${(species.confidence * 100).toFixed(1)}% · ${species.count}구간`, 'species-chip');

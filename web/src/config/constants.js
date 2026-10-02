@@ -141,7 +141,7 @@ export const COLORS = Object.freeze({
 // ============================================
 
 export const CACHE = Object.freeze({
-    APP_CACHE_NAME: 'Perch Web-app-v6',
+    APP_CACHE_NAME: 'Perch Web-app-v3',
     MODEL_CACHE_NAME: 'perch-v2-model-cache',
 });
 

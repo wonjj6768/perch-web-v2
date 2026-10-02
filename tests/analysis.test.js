@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { audioSegments, analyzeSegments, exportCSV, summarizeDetections, formatTimestamp } from '../web/src/utils/analysis-utils.js';
+import { audioSegments, analyzeSegments, refineSegments, exportCSV, summarizeDetections, formatTimestamp } from '../web/src/utils/analysis-utils.js';
 import { AUDIO_SAMPLES } from '../web/src/config/constants.js';
 import { validateAudioFile, normalizeAudio } from '../web/src/utils/audio-utils.js';
 
@@ -88,4 +88,91 @@ test('full-audio preparation mixes both channels and keeps full duration', async
 test('duration limit rejects before allocating resampler', async () => {
     const { prepareFullAudio } = await import('../web/src/utils/audio-utils.js');
     await assert.rejects(prepareFullAudio({ length: 1, duration: 1201 }), /20분/);
+});
+
+test('refinement recovers hidden candidates and preserves scores, timestamps and the retained list', () => {
+    const candidates = [{ start: 0, end: 1, detections: Array.from({ length: 10 }, (_, index) => ({
+        label: `Species ${index}`, confidence: (10 - index) / 100,
+    })) }];
+    const original = structuredClone(candidates);
+    assert.equal(refineSegments(candidates, { topK: 3, threshold: .5 })[0].detections.length, 0);
+    assert.deepEqual(refineSegments(candidates, { topK: 10, threshold: 0 }), original);
+    assert.deepEqual(refineSegments(candidates, { topK: 5, threshold: .08 })[0].detections, original[0].detections.slice(0, 3));
+    assert.deepEqual(candidates, original);
+});
+
+test('filtered summaries and CSV include only current settings and keep empty windows', () => {
+    const segments = refineSegments([
+        { start: 0, end: 5, detections: [{ label: 'Species a', confidence: .7 }, { label: 'Species b', confidence: .2 }] },
+        { start: 5, end: 6, detections: [{ label: 'Species b', confidence: .2 }] },
+    ], { topK: 10, threshold: .5 });
+    assert.deepEqual(summarizeDetections(segments).map(d => d.label), ['Species a']);
+    const csv = exportCSV({ name: 'filtered.wav', status: 'completed', model: 'Perch', settings: { topK: 10, threshold: .5 }, segments });
+    assert.ok(csv.includes('Species a')); assert.ok(!csv.includes('Species b'));
+    assert.ok(csv.includes('"5","6","","",""'));
+    assert.ok(csv.includes('"top_k","min_model_score"'));
+    assert.ok(csv.split('\r\n').slice(1).every(row => row.endsWith(',"10","0.5"')));
+});
+
+test('resume skips completed windows and retains the exact final sample and timestamps', async () => {
+    const samples = new Float32Array(AUDIO_SAMPLES * 2 + 1);
+    samples[AUDIO_SAMPLES] = .5; samples[samples.length - 1] = .75;
+    const prefix = [{ start: 0, end: 5, detections: [{ label: 'Already done', confidence: .8 }] }];
+    const classified = []; const progress = [];
+    const result = await analyzeSegments(samples, async audio => { classified.push(audio); return []; }, {
+        completedSegments: prefix, onProgress: value => progress.push([value.completed, value.total]),
+    });
+    assert.equal(classified.length, 2);
+    assert.equal(classified[0][0], .5);
+    assert.equal(classified[1][0], .75); assert.equal(classified[1][1], 0);
+    assert.deepEqual(result.map(({ start, end }) => [start, end]), [[0, 5], [5, 10], [10, samples.length / 32000]]);
+    assert.deepEqual(result[0], prefix[0]); assert.equal(prefix.length, 1);
+    assert.deepEqual(progress, [[1, 3], [2, 3], [3, 3]]);
+});
+
+test('a failed window can be resumed without rerunning or duplicating completed work', async () => {
+    const samples = new Float32Array(AUDIO_SAMPLES * 3);
+    let prefix = []; let calls = 0;
+    await assert.rejects(analyzeSegments(samples, async () => {
+        if (++calls === 2) throw new Error('temporary inference failure');
+        return [{ label: 'Species a', confidence: .6 }];
+    }, { onProgress: ({ segments }) => { prefix = segments.slice(); } }), /temporary inference failure/);
+    assert.equal(prefix.length, 1);
+    const result = await analyzeSegments(samples, async () => { calls++; return []; }, { completedSegments: prefix });
+    assert.equal(calls, 4); assert.equal(result.length, 3); assert.equal(result[0].detections.length, 1);
+});
+
+test('resume rejects mismatched or noncontiguous windows before inference', async () => {
+    let calls = 0;
+    for (const prefix of [
+        [{ start: 5, end: 10, detections: [] }],
+        [{ start: 0, end: 4, detections: [] }],
+        [{ start: 0, end: 5, detections: [] }, { start: 10, end: 15, detections: [] }],
+        [{ start: 0, end: 5, detections: [] }, { start: 5, end: 10, detections: [] }, { start: 10, end: 15, detections: [] }],
+    ]) await assert.rejects(analyzeSegments(new Float32Array(AUDIO_SAMPLES * 2), async () => { calls++; return []; }, {
+        completedSegments: prefix,
+    }), /완료 구간/);
+    assert.equal(calls, 0);
+});
+
+test('a fully processed cancelled report can finish without inference and still honors abort', async () => {
+    const samples = new Float32Array(1);
+    const prefix = [{ start: 0, end: 1 / 32000, detections: [] }];
+    let calls = 0;
+    assert.deepEqual(await analyzeSegments(samples, async () => { calls++; return []; }, { completedSegments: prefix }), prefix);
+    const controller = new AbortController();
+    await assert.rejects(analyzeSegments(samples, async () => { calls++; return []; }, {
+        completedSegments: prefix, signal: controller.signal, onProgress: () => controller.abort(),
+    }), { name: 'AbortError' });
+    assert.equal(calls, 0);
+});
+
+test('cancellation during a resumed invocation keeps the completed prefix intact', async () => {
+    const prefix = [{ start: 0, end: 5, detections: [{ label: 'Kept', confidence: .3 }] }];
+    const original = structuredClone(prefix); const controller = new AbortController();
+    let progress = 0;
+    await assert.rejects(analyzeSegments(new Float32Array(AUDIO_SAMPLES * 2), async () => { controller.abort(); return []; }, {
+        completedSegments: prefix, signal: controller.signal, onProgress: () => progress++,
+    }), { name: 'AbortError' });
+    assert.deepEqual(prefix, original); assert.equal(progress, 1);
 });

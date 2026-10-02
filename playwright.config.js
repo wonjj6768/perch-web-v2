@@ -9,12 +9,14 @@ export default defineConfig({
     use: {
         browserName: 'chromium',
         headless: true,
+        actionTimeout: 30000,
+        navigationTimeout: 45000,
         viewport: { width: 390, height: 844 },
         trace: 'off',
         screenshot: 'only-on-failure',
     },
     webServer: {
-        command: 'python3 -m http.server 8765 --bind 127.0.0.1',
+        command: `${process.platform === 'win32' ? 'python' : 'python3'} -m http.server 8765 --bind 127.0.0.1`,
         url: 'http://127.0.0.1:8765/web/',
         reuseExistingServer: !process.env.CI,
     },

@@ -4,8 +4,8 @@
  * @module app
  */
 
-import { UI_TEXT, AUDIO_SAMPLES, SAMPLE_RATE } from './config/constants.js';
-import { analyzeSegments, exportCSV } from './utils/analysis-utils.js';
+import { UI_TEXT, AUDIO_SAMPLES, SAMPLE_RATE, TOP_K_OPTIONS } from './config/constants.js';
+import { analyzeSegments, refineSegments, exportCSV } from './utils/analysis-utils.js';
 import { stateManager, audioManager, modelService } from './services/index.js';
 import {
     domElements,
@@ -16,6 +16,10 @@ import {
     recordButton,
     uploadArea,
 } from './components/index.js';
+
+// Every supported display setting can be derived from these candidates. Retain only
+// ten results per window, rather than the decoded audio or all model logits.
+const CANDIDATE_SETTINGS = Object.freeze({ topK: Math.max(...TOP_K_OPTIONS), threshold: 0 });
 
 // ============================================
 // App Definition
@@ -29,6 +33,8 @@ class App {
     #source = null;
     #sourceURL = null;
     #report = null;
+    #candidateSegments = [];
+    #unsubscribeSettings = null;
     #playbackEnd = null;
     #recordStarting = false;
     #disposed = false;
@@ -102,6 +108,10 @@ class App {
         uploadArea.initialize((file) => this.#handleFileUpload(file));
 
         domElements.retryBtn?.addEventListener('click', () => this.#analyzeSource());
+        document.getElementById('resume-analysis').addEventListener('click', () => this.#analyzeSource(true));
+        this.#unsubscribeSettings = stateManager.subscribe('settings', (settings, previous) => {
+            if (settings.topK !== previous.topK || settings.threshold !== previous.threshold) this.#refreshResults(true);
+        });
         document.getElementById('cancel-analysis').addEventListener('click', () => {
             this.#controller?.abort();
             this.#setStatus('중지 요청됨 · 실행 중인 구간이 끝나면 중지합니다');
@@ -181,6 +191,7 @@ class App {
         ++this.#generation;
         this.#source = { blob, name };
         this.#report = null;
+        this.#candidateSegments = [];
         const player = document.getElementById('audio-player');
         player.pause(); this.#playbackEnd = null;
         if (this.#sourceURL) URL.revokeObjectURL(this.#sourceURL);
@@ -196,26 +207,37 @@ class App {
 
     #setActions(busy) {
         document.getElementById('cancel-analysis').hidden = !busy || !this.#controller;
+        document.getElementById('resume-analysis').hidden = busy || !this.#report || this.#report.status === 'completed';
         domElements.retryBtn.disabled = busy || !this.#source;
-        domElements.retryBtn.textContent = this.#report ? '현재 설정으로 다시 분석' : '분석 시작';
+        domElements.retryBtn.textContent = this.#report ? '처음부터 다시 분석' : '분석 시작';
         for (const id of ['export-json', 'export-csv']) document.getElementById(id).disabled = busy || !this.#report;
     }
 
-    async #analyzeSource() {
+    #refreshResults(preserveView = false) {
+        if (!this.#report) return;
+        this.#report.settings = stateManager.getSettings();
+        this.#report.segments = refineSegments(this.#candidateSegments, this.#report.settings);
+        resultRenderer.displayReport(this.#report, segment => this.#playSegment(segment), { preserveView });
+    }
+
+    async #analyzeSource(resume = false) {
         if (!this.#source || this.#disposed) return;
+        const previousReport = resume ? this.#report : null;
+        const completedSegments = previousReport ? this.#candidateSegments.slice() : [];
         this.#controller?.abort();
         const controller = new AbortController();
         this.#controller = controller;
         const generation = ++this.#generation;
         const source = this.#source;
-        const settings = stateManager.getSettings();
         this.#report = null;
+        this.#candidateSegments = completedSegments;
         this.#setActions(true);
         recordButton.setDisabled(true);
         resultRenderer.showLoading('전체 오디오를 준비하고 있습니다…');
-        this.#setStatus('오디오 디코딩 중 · 최대 20분 / 50MB');
-        document.getElementById('analysis-progress').value = 0;
-        let report;
+        this.#setStatus(previousReport ? `오디오 디코딩 중 · 완료한 ${completedSegments.length}개 구간을 유지합니다` : '오디오 디코딩 중 · 최대 20분 / 50MB');
+        document.getElementById('analysis-progress').value = previousReport ? completedSegments.length / previousReport.totalSegments : 0;
+        // If decoding fails or is cancelled during resume, completed work remains available.
+        let report = previousReport ? { ...previousReport, status: 'running' } : null;
         try {
             const samples = await audioManager.processFile(source.blob);
             controller.signal.throwIfAborted();
@@ -223,14 +245,16 @@ class App {
                 schemaVersion: 1, name: source.name, model: 'Google Perch v2 (ONNX)',
                 scoreType: 'softmax (uncalibrated)', sampleRate: SAMPLE_RATE,
                 duration: samples.length / SAMPLE_RATE, windowSeconds: AUDIO_SAMPLES / SAMPLE_RATE,
-                settings, createdAt: new Date().toISOString(), status: 'running',
-                totalSegments: Math.ceil(samples.length / AUDIO_SAMPLES), segments: [],
+                settings: stateManager.getSettings(), createdAt: previousReport?.createdAt || new Date().toISOString(), status: 'running',
+                totalSegments: Math.ceil(samples.length / AUDIO_SAMPLES), segments: refineSegments(completedSegments, stateManager.getSettings()),
             };
-            await analyzeSegments(samples, audio => modelService.classify(audio, settings), {
+            await analyzeSegments(samples, audio => modelService.classify(audio, CANDIDATE_SETTINGS), {
                 signal: controller.signal,
+                completedSegments,
                 onProgress: ({ completed, total, segments }) => {
                     if (generation !== this.#generation) return;
-                    report.segments = segments.slice();
+                    this.#candidateSegments = segments.slice();
+                    report.segments = refineSegments(segments, stateManager.getSettings());
                     document.getElementById('analysis-progress').value = completed / total;
                     this.#setStatus(`전체 구간 분석 중 · ${completed} / ${total} (${Math.round(completed / total * 100)}%)`);
                 },
@@ -253,7 +277,7 @@ class App {
             if (generation === this.#generation && !this.#disposed) {
                 this.#controller = null;
                 this.#report = report?.segments.length ? report : null;
-                if (this.#report) resultRenderer.displayReport(this.#report, segment => this.#playSegment(segment));
+                this.#refreshResults();
                 recordButton.setDisabled(false);
                 this.#setActions(false);
             }
@@ -304,6 +328,10 @@ class App {
         this.#disposed = true;
         ++this.#generation;
         this.#controller?.abort();
+        this.#unsubscribeSettings?.();
+        this.#candidateSegments = [];
+        this.#source = null;
+        this.#report = null;
         document.getElementById('audio-player')?.pause();
         if (this.#sourceURL) URL.revokeObjectURL(this.#sourceURL);
         audioManager.dispose();
