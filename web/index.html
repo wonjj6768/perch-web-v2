@@ -112,10 +112,11 @@
                 <progress id="analysis-progress" max="1" value="0" aria-label="전체 구간 분석 진행률"></progress>
                 <div class="analysis-actions">
                     <button id="cancel-analysis" class="secondary-btn" hidden>분석 중지</button>
+                    <button id="resume-analysis" class="secondary-btn" hidden>이어서 분석</button>
                     <button id="export-json" class="secondary-btn" disabled>JSON 저장</button>
                     <button id="export-csv" class="secondary-btn" disabled>CSV 저장</button>
                 </div>
-                <p class="score-note">마지막 짧은 구간은 무음으로 채웁니다. 중지 시 완료된 구간만 저장됩니다. 설정 변경은 다음 분석에 적용됩니다.</p>
+                <p class="score-note">마지막 짧은 구간은 무음으로 채웁니다. 중지한 분석은 완료 구간을 유지하며 이어서 진행할 수 있습니다. 후보 수·최소 점수 변경은 완료된 결과에 즉시 반영됩니다.</p>
             </section>
 
             <!-- Results Section -->
@@ -150,6 +151,7 @@
                 </button>
             </div>
             <div class="modal-body">
+                <p class="score-note">후보 수와 최소 점수는 결과에 즉시 반영됩니다. 분석 중 변경하면 분석이 끝난 뒤 반영됩니다.</p>
                 <div class="setting-item">
                     <label for="top-k-select">표시할 결과 수</label>
                     <select id="top-k-select">

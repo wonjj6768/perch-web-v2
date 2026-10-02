@@ -8,7 +8,7 @@
 // 설정
 // ============================================
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const APP_CACHE_NAME = `Perch Web-app-${CACHE_VERSION}`;
 const MODEL_CACHE_NAME = 'perch-v2-model-cache';
 
